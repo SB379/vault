@@ -50,7 +50,8 @@ def run_pipeline(cfg: Config, client, today: str) -> RunResult:
                 f"circuit open: aborting {len(selected) - idx} remaining papers")
             break
         try:
-            fulltext = get_fulltext(paper.arxiv_id)
+            # arXiv flakiness gets retried but never feeds the LLM breaker.
+            fulltext = with_retries(lambda: get_fulltext(paper.arxiv_id), breaker=None)
             summary = with_retries(
                 lambda: summarize_paper(paper, fulltext=fulltext, known_concepts=concepts,
                                         client=client, model=cfg.summary_model),
@@ -70,12 +71,9 @@ def run_pipeline(cfg: Config, client, today: str) -> RunResult:
 
     # Save state before writing the digest so a digest failure can't lose ingestion state.
     vault.save_state(cfg, state)
-    digest_path = cfg.daily_dir / f"{today}.md"
-    if entries or result.failures or proposed or not digest_path.exists():
-        vault.write_daily_digest(cfg, date=today, entries=entries,
-                                 failures=result.failures, proposed_concepts=sorted(proposed))
 
-    # Weekly-flavored ideas note; a failure here never breaks ingestion.
+    # Weekly-flavored ideas note; runs before the digest so its failures land
+    # in the digest's Failures section. A failure here never breaks ingestion.
     if result.ingested or not (cfg.ideas_dir / f"{today}.md").exists():
         try:
             ideas_path = run_ideas(cfg, client=client, today=today, breaker=breaker)
@@ -83,4 +81,9 @@ def run_pipeline(cfg: Config, client, today: str) -> RunResult:
                 result.ideas_path = str(ideas_path)
         except Exception as e:
             result.failures.append(f"ideas: {e}")
+
+    digest_path = cfg.daily_dir / f"{today}.md"
+    if entries or result.failures or proposed or not digest_path.exists():
+        vault.write_daily_digest(cfg, date=today, entries=entries,
+                                 failures=result.failures, proposed_concepts=sorted(proposed))
     return result

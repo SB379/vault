@@ -43,6 +43,7 @@ def test_run_pipeline_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setattr(run_mod, "summarize_paper",
                         lambda p, fulltext, known_concepts, client, model: healthy_summary(
                             key_topics=["LLM-as-judge"]))
+    monkeypatch.setattr(run_mod, "run_ideas", lambda *a, **k: None)
 
     result = run_mod.run_pipeline(cfg, client=None, today="2026-07-22")
 
@@ -132,6 +133,8 @@ def test_ideas_failure_does_not_break_ingestion(tmp_path, monkeypatch):
     assert len(result.ingested) == 1
     assert any("ideas: ideas exploded" in f for f in result.failures)
     assert result.ideas_path is None
+    # ideas runs before the digest, so its failure lands in the digest
+    assert "ideas exploded" in (cfg.daily_dir / "2026-07-22.md").read_text()
 
 
 def test_ideas_path_recorded_on_success(tmp_path, monkeypatch):
@@ -199,5 +202,31 @@ def test_circuit_open_aborts_remaining_papers(tmp_path, monkeypatch):
 
     result = run_mod.run_pipeline(cfg, client=None, today="2026-07-22")
     assert result.ingested == []
-    # breaker threshold 3: first paper's retries open the circuit
-    assert any("circuit open: aborting 3 remaining papers" in f for f in result.failures)
+    # breaker threshold 3: one failure per exhausted paper — papers 1-3 fail,
+    # then the circuit opens and paper 4 is aborted
+    assert any("circuit open: aborting 1 remaining papers" in f for f in result.failures)
+    assert sum("rl" in f and "circuit" not in f for f in result.failures) == 3
+
+
+def test_fulltext_transient_failure_retried(tmp_path, monkeypatch):
+    import requests
+
+    cfg = _setup_min_pipeline(tmp_path, monkeypatch)
+    calls = {"n": 0}
+
+    def flaky_fulltext(aid, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise requests.exceptions.ConnectionError("arxiv hiccup")
+        return LONG_TEXT
+    monkeypatch.setattr(run_mod, "get_fulltext", flaky_fulltext)
+    from arxiv_pipeline import gateway
+    real_with_retries = gateway.with_retries
+    monkeypatch.setattr(run_mod, "with_retries",
+                        lambda fn, **kw: real_with_retries(fn, sleep_fn=lambda s: None, **kw))
+    monkeypatch.setattr(run_mod, "run_ideas", lambda *a, **k: None)
+
+    result = run_mod.run_pipeline(cfg, client=None, today="2026-07-22")
+    assert result.ingested == ["2607.00001"]
+    assert calls["n"] == 2
+    assert result.failures == []

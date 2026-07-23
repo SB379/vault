@@ -62,18 +62,20 @@ def with_retries(fn, *, attempts: int = 4, base_delay: float = 2.0,
     Retryable: anthropic RateLimitError, APIStatusError >= 500 or
     overloaded_error, APIConnectionError, requests ConnectionError/Timeout,
     plus any extra types in `retryable`. Non-retryable errors propagate
-    immediately. Failures/successes are recorded into `breaker` if given, and
-    breaker.check() runs before each attempt.
+    immediately. The breaker (if given) is checked once at call start and
+    records ONE outcome per with_retries call: a failure only when the call
+    finally fails (retries exhausted or non-retryable), a success on success —
+    transient failures that are recovered within the call never open it.
     """
+    if breaker is not None:
+        breaker.check()
     for n in range(attempts):
-        if breaker is not None:
-            breaker.check()
         try:
             result = fn()
         except Exception as e:
-            if breaker is not None:
-                breaker.record_failure()
             if not _is_retryable(e, retryable) or n == attempts - 1:
+                if breaker is not None:
+                    breaker.record_failure()
                 raise
             sleep_fn(random.uniform(0, min(max_delay, base_delay * 2 ** n)))
         else:

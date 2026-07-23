@@ -118,14 +118,18 @@ def test_breaker_success_resets_count():
     breaker.check()  # only 1 consecutive failure — still closed
 
 
-def test_with_retries_records_into_breaker():
+def test_with_retries_records_one_outcome_into_breaker():
+    # exhausted retries = ONE breaker failure, not one per attempt
     breaker = CircuitBreaker(threshold=2)
 
     def always():
         raise rate_limit_error()
 
     with pytest.raises(anthropic.RateLimitError):
-        with_retries(always, attempts=2, sleep_fn=lambda s: None, breaker=breaker)
+        with_retries(always, attempts=3, sleep_fn=lambda s: None, breaker=breaker)
+    assert breaker.failures == 1
+    with pytest.raises(anthropic.RateLimitError):
+        with_retries(always, attempts=3, sleep_fn=lambda s: None, breaker=breaker)
     with pytest.raises(CircuitOpenError):
         breaker.check()
 
@@ -133,3 +137,33 @@ def test_with_retries_records_into_breaker():
     breaker2.record_failure()
     with_retries(lambda: "ok", sleep_fn=lambda s: None, breaker=breaker2)
     breaker2.check()  # success reset it
+
+
+def test_transient_failures_recovered_in_call_do_not_open_breaker():
+    breaker = CircuitBreaker(threshold=3)
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            raise rate_limit_error()
+        return "ok"
+
+    assert with_retries(flaky, attempts=4, sleep_fn=lambda s: None,
+                        breaker=breaker) == "ok"
+    assert calls["n"] == 4
+    assert breaker.failures == 0
+    breaker.check()  # still closed
+
+
+def test_open_breaker_blocks_call_before_any_attempt():
+    breaker = CircuitBreaker(threshold=1)
+    breaker.record_failure()
+    calls = {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+
+    with pytest.raises(CircuitOpenError):
+        with_retries(fn, sleep_fn=lambda s: None, breaker=breaker)
+    assert calls["n"] == 0
