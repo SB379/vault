@@ -60,16 +60,28 @@ def _search_result():
 
 
 class FakeClient:
-    """Returns queued responses in order."""
+    """Returns queued responses in order via the streaming context-manager shape."""
 
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls = []
         self.messages = self
 
-    def create(self, **kwargs):
+    def stream(self, **kwargs):
         self.calls.append(kwargs)
-        return self.responses.pop(0)
+        response = self.responses.pop(0)
+
+        class _Stream:
+            def __enter__(self_inner):
+                return self_inner
+
+            def __exit__(self_inner, *exc):
+                return False
+
+            def get_final_message(self_inner):
+                return response
+
+        return _Stream()
 
 
 IDEA = {"title": "Eval harness for agents", "description": "d", "rationale": "r",

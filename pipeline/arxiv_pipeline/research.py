@@ -52,18 +52,24 @@ def research_idea(idea: dict, client, model: str) -> str:
     }
     tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 8}]
     messages = [user_msg]
-    response = client.messages.create(
-        model=model, max_tokens=8192, tools=tools, messages=messages
-    )
+
+    # Streaming avoids the SDK's per-request HTTP timeout: a single web-search
+    # turn can run many minutes server-side, which times out non-streaming calls.
+    def _call(msgs):
+        with client.messages.stream(
+            model=model, max_tokens=8192, tools=tools, messages=msgs
+        ) as stream:
+            return stream.get_final_message()
+
+    response = _call(messages)
     continuations = 0
     while response.stop_reason == "pause_turn":
         continuations += 1
         if continuations > MAX_CONTINUATIONS:
             raise RuntimeError("research still paused after max continuations")
+        print(f"    ...continuing (round {continuations})", flush=True)
         messages = [user_msg, {"role": "assistant", "content": response.content}]
-        response = client.messages.create(
-            model=model, max_tokens=8192, tools=tools, messages=messages
-        )
+        response = _call(messages)
     if response.stop_reason == "refusal":
         raise RuntimeError("research request refused")
     texts = [b.text for b in response.content if b.type == "text"]
@@ -115,15 +121,17 @@ def run_research(cfg: Config, client, today: str) -> list[Path]:
     date = note.stem
     ideas = parse_build_ideas(note.read_text())
     written: list[Path] = []
-    for idea in ideas:
+    for i, idea in enumerate(ideas, 1):
         out = cfg.research_dir / f"{date}-{slugify(idea['title'])}.md"
         if out.exists():
-            print(f"  SKIP existing {out.name}")
+            print(f"  SKIP existing {out.name}", flush=True)
             continue
+        print(f"  [{i}/{len(ideas)}] researching: {idea['title']}", flush=True)
         try:
             report = research_idea(idea, client=client, model=cfg.research_model)
         except Exception as e:
-            print(f"  FAIL research '{idea['title']}': {e}")
+            print(f"  FAIL research '{idea['title']}': {e}", flush=True)
             continue
         written.append(write_research_note(cfg, date, idea, report))
+        print(f"  WROTE {written[-1].name}", flush=True)
     return written
