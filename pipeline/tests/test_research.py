@@ -177,11 +177,23 @@ def test_run_research_failure_isolation(tmp_path, capsys):
             self.messages = self
             self.n = 0
 
-        def create(self, **kwargs):
+        def stream(self, **kwargs):
             self.n += 1
             if self.n == 1:
                 raise RuntimeError("boom")
-            return SimpleNamespace(stop_reason="end_turn", content=[_text("ok")])
+            response = SimpleNamespace(stop_reason="end_turn", content=[_text("ok")])
+
+            class _Stream:
+                def __enter__(self_inner):
+                    return self_inner
+
+                def __exit__(self_inner, *exc):
+                    return False
+
+                def get_final_message(self_inner):
+                    return response
+
+            return _Stream()
 
     paths = research_mod.run_research(cfg, client=FlakyClient(), today="2026-07-23")
     assert len(paths) == 1
