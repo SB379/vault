@@ -11,3 +11,4 @@ dashboard/node_modules/
 dashboard/.next/
 dashboard/next-env.d.ts
 pipeline/build/
+.obsidian/workspace.json

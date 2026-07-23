@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import subprocess
 import sys
 from pathlib import Path
 
@@ -8,6 +9,24 @@ import anthropic
 from .config import Config
 from .ideas import run_ideas
 from .run import run_pipeline
+
+
+def _auto_commit(vault_root: Path) -> None:
+    """Commit and push generated vault content; never fail the run over git."""
+    try:
+        subprocess.run(
+            ["git", "add", "Papers", "Daily", "Concepts", "Ideas",
+             "_system/state.json", "_system/concepts.md"],
+            cwd=vault_root, check=True, capture_output=True,
+        )
+        staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=vault_root)
+        if staged.returncode != 0:
+            subprocess.run(["git", "commit", "-m", "chore: daily ingest"],
+                           cwd=vault_root, check=True, capture_output=True)
+            subprocess.run(["git", "push"], cwd=vault_root, check=True,
+                           capture_output=True, timeout=60)
+    except Exception as e:
+        print(f"  WARN auto-commit skipped: {e}")
 
 
 def main() -> None:
@@ -35,6 +54,7 @@ def main() -> None:
     print(f"Ingested {len(result.ingested)} papers; {len(result.failures)} failures.")
     for f in result.failures:
         print(f"  FAIL {f}")
+    _auto_commit(cfg.vault_root)
 
 
 if __name__ == "__main__":
