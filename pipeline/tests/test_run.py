@@ -93,3 +93,54 @@ def test_per_paper_failure_recorded(tmp_path, monkeypatch):
     assert result.ingested == []
     assert "2607.00009" in result.failures[0]
     assert "download failed" in (cfg.daily_dir / "2026-07-22.md").read_text()
+
+
+def _setup_min_pipeline(tmp_path, monkeypatch):
+    cfg = Config(vault_root=tmp_path, score_threshold=0)
+    cfg.system_dir.mkdir(parents=True)
+    cfg.interest_profile_path.write_text("x")
+    papers = [Paper(arxiv_id="2607.00001", title="P", abstract="A", authors=["X"],
+                    categories=["cs.CL"], published="2026-07-21", url="u")]
+    monkeypatch.setattr(run_mod, "fetch_recent", lambda *a, **k: papers)
+    monkeypatch.setattr(run_mod, "score_papers", lambda ps, **k: [setattr(p, "score", 9) or p for p in ps])
+    monkeypatch.setattr(run_mod, "get_fulltext", lambda aid, **kw: "text")
+    monkeypatch.setattr(run_mod, "summarize_paper", lambda p, **kw: Summary(
+        tldr="t", key_topics=[], new_concepts=[], highlights=["h"],
+        method="m", evals_results="e", practitioner_takeaways="p", open_questions="o"))
+    return cfg
+
+
+def test_ideas_failure_does_not_break_ingestion(tmp_path, monkeypatch):
+    cfg = _setup_min_pipeline(tmp_path, monkeypatch)
+
+    def boom(cfg, client, today):
+        raise RuntimeError("ideas exploded")
+    monkeypatch.setattr(run_mod, "run_ideas", boom)
+
+    result = run_mod.run_pipeline(cfg, client=None, today="2026-07-22")
+    assert len(result.ingested) == 1
+    assert any("ideas: ideas exploded" in f for f in result.failures)
+    assert result.ideas_path is None
+
+
+def test_ideas_path_recorded_on_success(tmp_path, monkeypatch):
+    cfg = _setup_min_pipeline(tmp_path, monkeypatch)
+    ideas_file = cfg.ideas_dir / "2026-07-22.md"
+    monkeypatch.setattr(run_mod, "run_ideas", lambda cfg, client, today: ideas_file)
+
+    result = run_mod.run_pipeline(cfg, client=None, today="2026-07-22")
+    assert result.ideas_path == str(ideas_file)
+
+
+def test_ideas_skipped_when_nothing_ingested_and_note_exists(tmp_path, monkeypatch):
+    cfg = _setup_min_pipeline(tmp_path, monkeypatch)
+    # first run ingests; mark it already ingested via state and pre-create ideas note
+    vault.save_state(cfg, {"ingested_ids": ["2607.00001"], "failed": []})
+    cfg.ideas_dir.mkdir(parents=True)
+    (cfg.ideas_dir / "2026-07-22.md").write_text("existing")
+
+    called = []
+    monkeypatch.setattr(run_mod, "run_ideas", lambda *a, **k: called.append(1))
+    result = run_mod.run_pipeline(cfg, client=None, today="2026-07-22")
+    assert result.ingested == []
+    assert called == []

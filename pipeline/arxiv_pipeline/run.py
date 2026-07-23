@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from .config import Config
 from .fetch import fetch_recent
 from .fulltext import get_fulltext
+from .ideas import run_ideas
 from .score import score_papers
 from .summarize import summarize_paper
 from . import vault
@@ -13,6 +14,7 @@ from . import vault
 class RunResult:
     ingested: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
+    ideas_path: str | None = None
 
 
 def run_pipeline(cfg: Config, client, today: str) -> RunResult:
@@ -55,4 +57,13 @@ def run_pipeline(cfg: Config, client, today: str) -> RunResult:
     if entries or result.failures or proposed or not digest_path.exists():
         vault.write_daily_digest(cfg, date=today, entries=entries,
                                  failures=result.failures, proposed_concepts=sorted(proposed))
+
+    # Weekly-flavored ideas note; a failure here never breaks ingestion.
+    if result.ingested or not (cfg.ideas_dir / f"{today}.md").exists():
+        try:
+            ideas_path = run_ideas(cfg, client=client, today=today)
+            if ideas_path is not None:
+                result.ideas_path = str(ideas_path)
+        except Exception as e:
+            result.failures.append(f"ideas: {e}")
     return result

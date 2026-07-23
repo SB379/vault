@@ -12,6 +12,12 @@ class Config:
     score_threshold: int = 6
     scoring_model: str = "claude-haiku-4-5"
     summary_model: str = "claude-opus-4-8"
+    ideas_model: str = "claude-opus-4-8"
+    ideas_window_days: int = 7
+
+    @property
+    def ideas_dir(self) -> Path:
+        return self.vault_root / "Ideas"
 
     @property
     def papers_dir(self) -> Path:

@@ -16,3 +16,6 @@ def test_default_config():
     assert cfg.interest_profile_path == Path("/tmp/vault/_system/interest-profile.md")
     assert cfg.concepts_vocab_path == Path("/tmp/vault/_system/concepts.md")
     assert cfg.state_path == Path("/tmp/vault/_system/state.json")
+    assert cfg.ideas_model == "claude-opus-4-8"
+    assert cfg.ideas_window_days == 7
+    assert cfg.ideas_dir == Path("/tmp/vault/Ideas")
