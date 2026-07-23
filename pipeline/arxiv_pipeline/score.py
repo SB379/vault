@@ -51,7 +51,7 @@ def score_papers(papers: list[Paper], profile: str, client, model: str) -> list[
         batch = papers[i : i + BATCH_SIZE]
         response = client.messages.create(
             model=model,
-            max_tokens=4096,
+            max_tokens=8192,
             output_config={"format": {"type": "json_schema", "schema": SCORE_SCHEMA}},
             messages=[{"role": "user", "content": PROMPT.format(profile=profile, papers=_render(batch))}],
         )
