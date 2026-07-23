@@ -14,10 +14,15 @@ class Config:
     summary_model: str = "claude-opus-4-8"
     ideas_model: str = "claude-opus-4-8"
     ideas_window_days: int = 7
+    research_model: str = "claude-opus-4-8"
 
     @property
     def ideas_dir(self) -> Path:
         return self.vault_root / "Ideas"
+
+    @property
+    def research_dir(self) -> Path:
+        return self.vault_root / "Research"
 
     @property
     def papers_dir(self) -> Path:

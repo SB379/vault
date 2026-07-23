@@ -19,3 +19,5 @@ def test_default_config():
     assert cfg.ideas_model == "claude-opus-4-8"
     assert cfg.ideas_window_days == 7
     assert cfg.ideas_dir == Path("/tmp/vault/Ideas")
+    assert cfg.research_model == "claude-opus-4-8"
+    assert cfg.research_dir == Path("/tmp/vault/Research")

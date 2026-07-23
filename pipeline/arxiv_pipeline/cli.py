@@ -8,6 +8,7 @@ import anthropic
 
 from .config import Config
 from .ideas import run_ideas
+from .research import run_research
 from .run import run_pipeline
 
 
@@ -36,9 +37,21 @@ def main() -> None:
     parser.add_argument("--date", default=datetime.date.today().isoformat())
     parser.add_argument("--ideas", action="store_true",
                         help="Skip ingestion; only (re)generate the ideas note")
+    parser.add_argument("--research", action="store_true",
+                        help="Skip ingestion; run market research over the latest ideas note")
     args = parser.parse_args()
 
     cfg = Config(vault_root=Path(args.vault))
+
+    if args.research:
+        client = anthropic.Anthropic()
+        paths = run_research(cfg, client=client, today=args.date)
+        if paths:
+            for p in paths:
+                print(str(p))
+        else:
+            print("nothing to research")
+        return
 
     if args.ideas:
         client = anthropic.Anthropic()
