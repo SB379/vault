@@ -57,7 +57,7 @@ def fetch_recent(categories: list[str], since: str, fetch_fn=None) -> list[Paper
     """Fetch recent submissions across categories, keeping papers published on/after `since` (ISO date)."""
     if fetch_fn is None:
         def fetch_fn(url: str) -> str:
-            resp = requests.get(url, timeout=30)
+            resp = requests.get(url, timeout=60)
             resp.raise_for_status()
             return resp.text
 
@@ -65,5 +65,14 @@ def fetch_recent(categories: list[str], since: str, fetch_fn=None) -> list[Paper
     for i, cat in enumerate(categories):
         if i > 0:
             time.sleep(ARXIV_RATE_LIMIT_SECONDS)
-        all_papers.extend(parse_feed(fetch_fn(build_query_url(cat))))
+        # One retry per category, then skip it — a flaky category feed should
+        # not kill the whole run; its papers stay in the window for tomorrow.
+        for attempt in (1, 2):
+            try:
+                all_papers.extend(parse_feed(fetch_fn(build_query_url(cat))))
+                break
+            except Exception:
+                if attempt == 2:
+                    break
+                time.sleep(ARXIV_RATE_LIMIT_SECONDS)
     return [p for p in dedupe(all_papers) if p.published >= since]

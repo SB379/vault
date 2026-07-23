@@ -39,3 +39,16 @@ def test_build_query_url():
     assert "search_query=cat%3Acs.CL" in url or "search_query=cat:cs.CL" in url
     assert "sortBy=submittedDate" in url
     assert "max_results=100" in url
+
+
+def test_fetch_recent_skips_failing_category(monkeypatch):
+    import arxiv_pipeline.fetch as fetch_mod
+    monkeypatch.setattr(fetch_mod.time, "sleep", lambda s: None)
+
+    def flaky(url):
+        if "cs.LG" in url:
+            raise TimeoutError("read timed out")
+        return ATOM
+
+    papers = fetch_mod.fetch_recent(["cs.CL", "cs.LG"], since="2026-07-20", fetch_fn=flaky)
+    assert len(papers) == 1  # cs.CL parsed; cs.LG skipped after retry
