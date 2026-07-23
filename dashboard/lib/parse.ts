@@ -215,6 +215,53 @@ export function parseIdeasNote(raw: string, date: string): IdeasNote {
   return note;
 }
 
+export type ResearchVerdict = "GAP" | "CROWDED" | "UNCLEAR";
+
+export interface ResearchNote {
+  date: string;
+  ideaTitle: string;
+  verdict: ResearchVerdict | null;
+  body: string;
+  slug: string;
+}
+
+export function parseResearchNote(raw: string, filename: string): ResearchNote {
+  const slug = filename.replace(/\.md$/, "");
+  const dateMatch = slug.match(/^(\d{4}-\d{2}-\d{2})/);
+  let fm: matter.GrayMatterFile<string>;
+  let data: Record<string, unknown> = {};
+  let body = raw;
+  try {
+    fm = matter(raw);
+    data = fm.data as Record<string, unknown>;
+    body = fm.content.trim();
+  } catch {
+    // fall through with raw body
+  }
+  // Strip the leading `# Title` line — the page renders the title itself.
+  body = body.replace(/^# .+\n+/, "");
+
+  const date =
+    data.date instanceof Date
+      ? data.date.toISOString().slice(0, 10)
+      : String(data.date ?? dateMatch?.[1] ?? "");
+
+  let verdict: ResearchVerdict | null = null;
+  const verdictSection = body.match(/(?:^|\n)## Verdict\n([\s\S]*?)(?=\n## |$)/);
+  if (verdictSection) {
+    const v = verdictSection[1].match(/\b(GAP|CROWDED|UNCLEAR)\b/);
+    if (v) verdict = v[1] as ResearchVerdict;
+  }
+
+  return {
+    date,
+    ideaTitle: String(data.idea_title ?? slug),
+    verdict,
+    body,
+    slug,
+  };
+}
+
 export function parseConceptsVocab(raw: string): string[] {
   return raw
     .split("\n")

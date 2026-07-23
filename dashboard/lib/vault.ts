@@ -7,9 +7,11 @@ import {
   parseDigest,
   parseConceptsVocab,
   parseIdeasNote,
+  parseResearchNote,
   type PaperNote,
   type Digest,
   type IdeasNote,
+  type ResearchNote,
 } from "./parse";
 
 export const VAULT_ROOT = process.env.VAULT_ROOT ?? path.resolve(process.cwd(), "..");
@@ -113,6 +115,23 @@ export const getAllIdeas = cache(async (): Promise<IdeasNote[]> => {
   for (const name of names) {
     const raw = await fs.readFile(path.join(dir, name), "utf8");
     notes.push(parseIdeasNote(raw, path.basename(name, ".md")));
+  }
+  return notes;
+});
+
+export const getAllResearch = cache(async (): Promise<ResearchNote[]> => {
+  const dir = path.join(VAULT_ROOT, "Research");
+  let names: string[];
+  try {
+    names = (await fs.readdir(dir)).filter((n) => n.endsWith(".md"));
+  } catch {
+    return [];
+  }
+  names.sort((a, b) => b.localeCompare(a)); // date desc
+  const notes: ResearchNote[] = [];
+  for (const name of names) {
+    const raw = await fs.readFile(path.join(dir, name), "utf8");
+    notes.push(parseResearchNote(raw, name));
   }
   return notes;
 });
