@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .config import Config
 from .gateway import with_retries
+from .health import check_research
 from .vault import slugify
 
 MAX_CONTINUATIONS = 5
@@ -134,6 +135,9 @@ def run_research(cfg: Config, client, today: str) -> list[Path]:
         print(f"  [{i}/{len(ideas)}] researching: {idea['title']}", flush=True)
         try:
             report = research_idea(idea, client=client, model=cfg.research_model)
+            problems = check_research(report)
+            if problems:
+                raise RuntimeError(f"semantic check failed: {problems}")
         except Exception as e:
             print(f"  FAIL research '{idea['title']}': {e}", flush=True)
             continue

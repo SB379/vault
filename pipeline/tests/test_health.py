@@ -77,3 +77,22 @@ def test_idea_missing_title_or_description_flagged():
         "build_ideas": [_idea(description="")],
     })
     assert len(problems) == 2
+
+
+def test_check_research_healthy():
+    from arxiv_pipeline.health import check_research
+    report = "## Verdict\n**GAP** ok\n## Evidence\n- Foo — https://foo.com/x\n"
+    assert check_research(report) == []
+
+
+def test_check_research_no_sources():
+    from arxiv_pipeline.health import check_research
+    report = "## Verdict\n**GAP**\n## Evidence\nNo live sources were retrieved this session.\n"
+    problems = check_research(report)
+    assert any("no sources" in p for p in problems)
+
+
+def test_check_research_missing_sections():
+    from arxiv_pipeline.health import check_research
+    problems = check_research("just prose")
+    assert len(problems) == 2

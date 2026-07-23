@@ -149,7 +149,7 @@ def _vault_with_note(tmp_path):
 
 def test_run_research_writes_notes(tmp_path):
     cfg = _vault_with_note(tmp_path)
-    resp = SimpleNamespace(stop_reason="end_turn", content=[_text("## Verdict\n**GAP**")])
+    resp = SimpleNamespace(stop_reason="end_turn", content=[_text("## Verdict\n**GAP**\n## Evidence\n- X — https://x.com")])
     client = FakeClient([resp, resp])
     paths = research_mod.run_research(cfg, client=client, today="2026-07-23")
     assert len(paths) == 2
@@ -161,7 +161,7 @@ def test_run_research_idempotent_skip(tmp_path, capsys):
     cfg.research_dir.mkdir(parents=True)
     existing = cfg.research_dir / "2026-07-22-eval-harness-for-agents.md"
     existing.write_text("already done")
-    resp = SimpleNamespace(stop_reason="end_turn", content=[_text("report")])
+    resp = SimpleNamespace(stop_reason="end_turn", content=[_text("## Verdict\n**GAP**\n## Evidence\n- X — https://x.com")])
     client = FakeClient([resp])
     paths = research_mod.run_research(cfg, client=client, today="2026-07-23")
     assert len(paths) == 1
@@ -181,7 +181,7 @@ def test_run_research_failure_isolation(tmp_path, capsys):
             self.n += 1
             if self.n == 1:
                 raise RuntimeError("boom")
-            response = SimpleNamespace(stop_reason="end_turn", content=[_text("ok")])
+            response = SimpleNamespace(stop_reason="end_turn", content=[_text("## Verdict\n**GAP**\n## Evidence\n- X — https://x.com")])
 
             class _Stream:
                 def __enter__(self_inner):

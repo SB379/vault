@@ -22,6 +22,21 @@ def check_summary(summary: Summary, fulltext: str, known_concepts: list[str]) ->
     return problems
 
 
+def check_research(report: str) -> list[str]:
+    """A market-research report without retrieved sources is a fabrication risk."""
+    problems: list[str] = []
+    if "## Verdict" not in report:
+        problems.append("missing ## Verdict section")
+    if "## Evidence" not in report:
+        problems.append("missing ## Evidence section")
+    else:
+        evidence = report.split("## Evidence", 1)[1]
+        has_source = any(marker in evidence for marker in ("http://", "https://", "arxiv.org", ".com", ".io", ".ai", ".dev"))
+        if not has_source:
+            problems.append("Evidence section contains no sources/links — report not grounded in search results")
+    return problems
+
+
 def check_ideas(ideas: dict) -> list[str]:
     problems: list[str] = []
     if not ideas.get("pipeline_improvements") and not ideas.get("build_ideas"):
