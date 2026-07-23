@@ -7,7 +7,7 @@ def test_default_config():
     assert cfg.categories == ["cs.CL", "cs.LG", "cs.SE", "cs.AI", "cs.IT", "cs.DB"]
     assert cfg.max_papers_per_day == 12
     assert cfg.score_threshold == 6
-    assert cfg.scoring_model == "claude-opus-4-8"
+    assert cfg.scoring_model == "claude-haiku-4-5"
     assert cfg.summary_model == "claude-opus-4-8"
     assert cfg.papers_dir == Path("/tmp/vault/Papers")
     assert cfg.daily_dir == Path("/tmp/vault/Daily")

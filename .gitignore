@@ -5,3 +5,4 @@ __pycache__/
 *.egg-info/
 .DS_Store
 pipeline/.env
+pipeline/com.sid.arxiv-pipeline.plist

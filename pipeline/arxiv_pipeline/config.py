@@ -10,7 +10,7 @@ class Config:
     )
     max_papers_per_day: int = 12
     score_threshold: int = 6
-    scoring_model: str = "claude-opus-4-8"
+    scoring_model: str = "claude-haiku-4-5"
     summary_model: str = "claude-opus-4-8"
 
     @property
