@@ -11,7 +11,7 @@ API_BASE = "http://export.arxiv.org/api/query"
 ARXIV_RATE_LIMIT_SECONDS = 3  # arXiv asks for ~1 request / 3s
 
 
-def build_query_url(category: str, max_results: int = 200) -> str:
+def build_query_url(category: str, max_results: int = 1000) -> str:
     params = {
         "search_query": f"cat:{category}",
         "sortBy": "submittedDate",

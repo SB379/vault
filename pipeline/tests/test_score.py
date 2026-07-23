@@ -46,3 +46,17 @@ def test_unscored_paper_defaults_to_zero():
     client = FakeClient({"scores": []})
     scored = score_papers(papers, profile="x", client=client, model="claude-opus-4-8")
     assert scored[0].score == 0
+
+
+def test_failed_batch_degrades_to_zero():
+    class BoomClient:
+        def __init__(self):
+            self.messages = self
+
+        def create(self, **kwargs):
+            raise RuntimeError("api down")
+
+    papers = [make_paper(1)]
+    scored = score_papers(papers, profile="x", client=BoomClient(), model="m")
+    assert scored[0].score == 0
+    assert scored[0].score_reason == ""
