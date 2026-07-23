@@ -44,3 +44,19 @@ def test_pdf_fallback_on_404():
     text = get_fulltext("2607.00001", get_fn=fake_get, pdf_extract_fn=fake_pdf_extract)
     assert text == "extracted pdf text"
     assert any("pdf" in u for u in calls)
+
+
+def test_pdf_fallback_on_html_fetch_exception():
+    def fake_get(url, timeout):
+        if "html" in url:
+            raise ConnectionError("boom")
+        return FakeResp(200, content=b"%PDF-fake")
+
+    def fake_pdf_extract(data):
+        return "extracted pdf text"
+
+    assert get_fulltext("2607.00001", get_fn=fake_get, pdf_extract_fn=fake_pdf_extract) == "extracted pdf text"
+
+
+def test_html_entities_unescaped():
+    assert html_to_text("<p>a &amp; b</p>") == "a & b"
