@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from .config import Config
+from .gateway import with_retries
 from .vault import slugify
 
 MAX_CONTINUATIONS = 5
@@ -55,11 +56,15 @@ def research_idea(idea: dict, client, model: str) -> str:
 
     # Streaming avoids the SDK's per-request HTTP timeout: a single web-search
     # turn can run many minutes server-side, which times out non-streaming calls.
+    # with_retries adds jittered backoff for overload/5xx/connection errors.
     def _call(msgs):
-        with client.messages.stream(
-            model=model, max_tokens=8192, tools=tools, messages=msgs
-        ) as stream:
-            return stream.get_final_message()
+        def _once():
+            with client.messages.stream(
+                model=model, max_tokens=8192, tools=tools, messages=msgs
+            ) as stream:
+                return stream.get_final_message()
+
+        return with_retries(_once)
 
     response = _call(messages)
     continuations = 0
