@@ -10,3 +10,4 @@ pipeline/com.sid.arxiv-pipeline.plist
 dashboard/node_modules/
 dashboard/.next/
 dashboard/next-env.d.ts
+pipeline/build/
