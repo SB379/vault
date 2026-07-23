@@ -11,8 +11,8 @@ from .run import run_pipeline
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Daily arXiv -> Obsidian pipeline")
-    parser.add_argument("--vault", default=str(Path(__file__).resolve().parents[2]),
-                        help="Vault root (defaults to repo root)")
+    parser.add_argument("--vault", default=str(Path.cwd()),
+                        help="Vault root (defaults to current directory)")
     parser.add_argument("--date", default=datetime.date.today().isoformat())
     args = parser.parse_args()
 
