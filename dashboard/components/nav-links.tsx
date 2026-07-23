@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/", label: "Today" },
   { href: "/papers", label: "Papers" },
   { href: "/trends", label: "Trends" },
+  { href: "/graph", label: "Graph" },
 ];
 
 export function NavLinks() {
