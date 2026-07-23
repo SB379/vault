@@ -9,7 +9,7 @@ const LINKS = [
   { href: "/papers", label: "Papers" },
   { href: "/trends", label: "Trends" },
   { href: "/ideas", label: "Ideas" },
-  { href: "/research", label: "Research" },
+  { href: "/research", label: "Market" },
   { href: "/backlog", label: "Backlog" },
   { href: "/graph", label: "Graph" },
 ];
