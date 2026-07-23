@@ -25,6 +25,7 @@ def run_pipeline(cfg: Config, client, today: str) -> RunResult:
     papers = fetch_recent(cfg.categories, since=since)
 
     papers = score_papers(papers, profile=profile, client=client, model=cfg.scoring_model)
+    # Already-ingested papers are intentionally filtered AFTER scoring (idempotency semantics).
     selected = sorted(
         [p for p in papers
          if p.arxiv_id not in state["ingested_ids"]
@@ -39,16 +40,19 @@ def run_pipeline(cfg: Config, client, today: str) -> RunResult:
             fulltext = get_fulltext(paper.arxiv_id)
             summary = summarize_paper(paper, fulltext=fulltext, known_concepts=concepts,
                                       client=client, model=cfg.summary_model)
-            vault.write_paper_note(cfg, paper, summary)
+            note_path = vault.write_paper_note(cfg, paper, summary)
             vault.ensure_concept_pages(cfg, [t for t in summary.key_topics if t in concepts])
             proposed.update(summary.new_concepts)
-            entries.append((paper, vault.slugify(paper.title)))
+            entries.append((paper, note_path.stem))
             state["ingested_ids"].append(paper.arxiv_id)
             result.ingested.append(paper.arxiv_id)
         except Exception as e:  # per-paper isolation: one failure never kills the run
             result.failures.append(f"{paper.arxiv_id}: {e}")
 
-    vault.write_daily_digest(cfg, date=today, entries=entries,
-                             failures=result.failures, proposed_concepts=sorted(proposed))
+    # Save state before writing the digest so a digest failure can't lose ingestion state.
     vault.save_state(cfg, state)
+    digest_path = cfg.daily_dir / f"{today}.md"
+    if entries or result.failures or proposed or not digest_path.exists():
+        vault.write_daily_digest(cfg, date=today, entries=entries,
+                                 failures=result.failures, proposed_concepts=sorted(proposed))
     return result

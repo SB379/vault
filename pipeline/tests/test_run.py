@@ -39,9 +39,41 @@ def test_run_pipeline_end_to_end(tmp_path, monkeypatch):
     state = vault.load_state(cfg)
     assert set(state["ingested_ids"]) == {"2607.00001", "2607.00002"}
 
-    # idempotency: second run ingests nothing new
+    # idempotency: second run ingests nothing new and leaves the digest intact
     result2 = run_mod.run_pipeline(cfg, client=None, today="2026-07-22")
     assert result2.ingested == []
+    digest = (cfg.daily_dir / "2026-07-22.md").read_text()
+    assert "[[paper-1]]" in digest and "[[paper-2]]" in digest
+
+
+def test_digest_links_match_actual_note_filenames(tmp_path, monkeypatch):
+    cfg = Config(vault_root=tmp_path, max_papers_per_day=5, score_threshold=0)
+    cfg.system_dir.mkdir(parents=True)
+    cfg.interest_profile_path.write_text("x")
+
+    papers = [
+        Paper(arxiv_id=f"2607.0000{i}", title="Same Title", abstract="A", authors=["X"],
+              categories=["cs.CL"], published="2026-07-21", url=f"u{i}")
+        for i in range(1, 3)
+    ]
+    monkeypatch.setattr(run_mod, "fetch_recent", lambda *a, **k: papers)
+    monkeypatch.setattr(run_mod, "score_papers",
+                        lambda ps, **k: [setattr(p, "score", 9) or p for p in ps])
+    monkeypatch.setattr(run_mod, "get_fulltext", lambda aid, **kw: "text")
+    monkeypatch.setattr(run_mod, "summarize_paper", lambda p, **kw: Summary(
+        tldr="t", key_topics=[], new_concepts=[], highlights=["h"],
+        method="m", evals_results="e", practitioner_takeaways="p", open_questions="o"))
+
+    result = run_mod.run_pipeline(cfg, client=None, today="2026-07-22")
+    assert len(result.ingested) == 2
+
+    notes = sorted(p for p in cfg.papers_dir.rglob("*.md"))
+    assert len(notes) == 2
+    stems = {p.stem for p in notes}
+    assert len(stems) == 2  # collision handling produced distinct filenames
+    digest = (cfg.daily_dir / "2026-07-22.md").read_text()
+    for stem in stems:
+        assert stem in digest
 
 
 def test_per_paper_failure_recorded(tmp_path, monkeypatch):
