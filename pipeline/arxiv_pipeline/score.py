@@ -1,5 +1,7 @@
 import json
+import time
 
+from .gateway import with_retries
 from .models import Paper
 
 BATCH_SIZE = 25
@@ -46,17 +48,21 @@ def _render(papers: list[Paper]) -> str:
     )
 
 
-def score_papers(papers: list[Paper], profile: str, client, model: str) -> list[Paper]:
+def score_papers(papers: list[Paper], profile: str, client, model: str,
+                 breaker=None, sleep_fn=time.sleep) -> list[Paper]:
     for i in range(0, len(papers), BATCH_SIZE):
         batch = papers[i : i + BATCH_SIZE]
         # A failed batch degrades to score 0 (skipped today, retried while in the
         # fetch window) instead of aborting the whole run.
         try:
-            response = client.messages.create(
-                model=model,
-                max_tokens=8192,
-                output_config={"format": {"type": "json_schema", "schema": SCORE_SCHEMA}},
-                messages=[{"role": "user", "content": PROMPT.format(profile=profile, papers=_render(batch))}],
+            response = with_retries(
+                lambda: client.messages.create(
+                    model=model,
+                    max_tokens=8192,
+                    output_config={"format": {"type": "json_schema", "schema": SCORE_SCHEMA}},
+                    messages=[{"role": "user", "content": PROMPT.format(profile=profile, papers=_render(batch))}],
+                ),
+                breaker=breaker, sleep_fn=sleep_fn,
             )
             text = next((b.text for b in response.content if b.type == "text"), None)
             if text is None or response.stop_reason not in ("end_turn", "stop_sequence"):

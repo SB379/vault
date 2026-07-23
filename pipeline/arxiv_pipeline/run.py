@@ -3,6 +3,9 @@ from dataclasses import dataclass, field
 
 from .config import Config
 from .fetch import fetch_recent
+from . import gateway
+from .gateway import CircuitBreaker, CircuitOpenError, with_retries
+from .health import check_summary
 from .fulltext import get_fulltext
 from .ideas import run_ideas
 from .score import score_papers
@@ -26,7 +29,9 @@ def run_pipeline(cfg: Config, client, today: str) -> RunResult:
     since = (datetime.date.fromisoformat(today) - datetime.timedelta(days=2)).isoformat()
     papers = fetch_recent(cfg.categories, since=since)
 
-    papers = score_papers(papers, profile=profile, client=client, model=cfg.scoring_model)
+    breaker = CircuitBreaker()
+    papers = score_papers(papers, profile=profile, client=client,
+                          model=cfg.scoring_model, breaker=breaker)
     # Already-ingested papers are intentionally filtered AFTER scoring (idempotency semantics).
     selected = sorted(
         [p for p in papers
@@ -37,11 +42,24 @@ def run_pipeline(cfg: Config, client, today: str) -> RunResult:
 
     entries: list[tuple] = []
     proposed: set[str] = set()
-    for paper in selected:
+    for idx, paper in enumerate(selected):
         try:
-            fulltext = get_fulltext(paper.arxiv_id)
-            summary = summarize_paper(paper, fulltext=fulltext, known_concepts=concepts,
-                                      client=client, model=cfg.summary_model)
+            breaker.check()
+        except CircuitOpenError:
+            result.failures.append(
+                f"circuit open: aborting {len(selected) - idx} remaining papers")
+            break
+        try:
+            # arXiv flakiness gets retried but never feeds the LLM breaker.
+            fulltext = with_retries(lambda: get_fulltext(paper.arxiv_id), breaker=None)
+            summary = with_retries(
+                lambda: summarize_paper(paper, fulltext=fulltext, known_concepts=concepts,
+                                        client=client, model=cfg.summary_model),
+                breaker=breaker,
+            )
+            problems = check_summary(summary, fulltext, concepts)
+            if problems:
+                raise RuntimeError(f"semantic check failed: {problems}")
             note_path = vault.write_paper_note(cfg, paper, summary)
             vault.ensure_concept_pages(cfg, [t for t in summary.key_topics if t in concepts])
             proposed.update(summary.new_concepts)
@@ -53,17 +71,19 @@ def run_pipeline(cfg: Config, client, today: str) -> RunResult:
 
     # Save state before writing the digest so a digest failure can't lose ingestion state.
     vault.save_state(cfg, state)
-    digest_path = cfg.daily_dir / f"{today}.md"
-    if entries or result.failures or proposed or not digest_path.exists():
-        vault.write_daily_digest(cfg, date=today, entries=entries,
-                                 failures=result.failures, proposed_concepts=sorted(proposed))
 
-    # Weekly-flavored ideas note; a failure here never breaks ingestion.
+    # Weekly-flavored ideas note; runs before the digest so its failures land
+    # in the digest's Failures section. A failure here never breaks ingestion.
     if result.ingested or not (cfg.ideas_dir / f"{today}.md").exists():
         try:
-            ideas_path = run_ideas(cfg, client=client, today=today)
+            ideas_path = run_ideas(cfg, client=client, today=today, breaker=breaker)
             if ideas_path is not None:
                 result.ideas_path = str(ideas_path)
         except Exception as e:
             result.failures.append(f"ideas: {e}")
+
+    digest_path = cfg.daily_dir / f"{today}.md"
+    if entries or result.failures or proposed or not digest_path.exists():
+        vault.write_daily_digest(cfg, date=today, entries=entries,
+                                 failures=result.failures, proposed_concepts=sorted(proposed))
     return result
