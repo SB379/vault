@@ -15,6 +15,7 @@ class Config:
     ideas_model: str = "claude-opus-4-8"
     ideas_window_days: int = 7
     research_model: str = "claude-opus-4-8"
+    spec_model: str = "claude-opus-4-8"
 
     @property
     def ideas_dir(self) -> Path:
@@ -23,6 +24,10 @@ class Config:
     @property
     def research_dir(self) -> Path:
         return self.vault_root / "Research"
+
+    @property
+    def backlog_dir(self) -> Path:
+        return self.vault_root / "Backlog"
 
     @property
     def papers_dir(self) -> Path:

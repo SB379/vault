@@ -42,6 +42,36 @@ Every idea must cite the slugs of the source notes that inspired it in "source_s
 
 _FM_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 
+_IDEA_BLOCK_RE = re.compile(
+    r"^### (?P<title>.+?)\n(?P<body>.*?)(?=^### |\Z)", re.DOTALL | re.MULTILINE
+)
+
+
+def parse_ideas_section(raw: str, heading: str) -> list[dict]:
+    """Parse an Ideas note's `## {heading}` section into idea dicts."""
+    m = re.search(
+        rf"^## {re.escape(heading)}\n(.*?)(?=^## |\Z)", raw, re.DOTALL | re.MULTILINE
+    )
+    if not m:
+        return []
+    ideas = []
+    for block in _IDEA_BLOCK_RE.finditer(m.group(1)):
+        body = block.group("body")
+        why = re.search(r"^\*Why:\* (.+)$", body, re.MULTILINE)
+        sources = re.search(r"^\*Sources:\* (.+)$", body, re.MULTILINE)
+        description_lines = []
+        for line in body.splitlines():
+            if line.startswith("*Why:*") or line.startswith("*Sources:*"):
+                break
+            description_lines.append(line)
+        ideas.append({
+            "title": block.group("title").strip(),
+            "description": "\n".join(description_lines).strip(),
+            "rationale": why.group(1).strip() if why else "",
+            "source_slugs": re.findall(r"\[\[([^\]]+)\]\]", sources.group(1)) if sources else [],
+        })
+    return ideas
+
 
 def _frontmatter_field(fm: str, key: str) -> str | None:
     m = re.search(rf"^{key}:\s*(.+)$", fm, re.MULTILINE)

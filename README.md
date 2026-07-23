@@ -51,6 +51,21 @@ cd pipeline
 After code changes: `.venv/bin/pip install .` (install is non-editable — the
 Homebrew Python 3.13.0 `site` bug skips `__editable__*.pth` files).
 
+### Backlog
+
+`Backlog/` holds a queue of improvement items (`NNN-<slug>.md`), each moving
+through `proposed` → `specced` → `done`:
+
+```bash
+.venv/bin/arxiv-pipeline --backlog-add "Title" --desc "Description"   # manual item
+.venv/bin/arxiv-pipeline --backlog-import   # pull Pipeline improvements from Ideas notes (deduped by title)
+.venv/bin/arxiv-pipeline --backlog-spec     # Opus writes ## Spec + ## Build plan into each proposed item
+```
+
+Specced items are detailed enough for a future coding session to execute
+without further design discussion; mark them `done` by hand after shipping.
+They render on the dashboard's Backlog page.
+
 ## Dashboard
 
 ```bash

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import anthropic
 
+from .backlog import add_item, import_from_ideas, run_spec_generation
 from .config import Config
 from .ideas import run_ideas
 from .research import run_research
@@ -39,9 +40,41 @@ def main() -> None:
                         help="Skip ingestion; only (re)generate the ideas note")
     parser.add_argument("--research", action="store_true",
                         help="Skip ingestion; run market research over the latest ideas note")
+    parser.add_argument("--backlog-import", action="store_true",
+                        help="Skip ingestion; import pipeline improvements from Ideas notes into Backlog/")
+    parser.add_argument("--backlog-spec", action="store_true",
+                        help="Skip ingestion; generate SPEC + BUILD docs for proposed backlog items")
+    parser.add_argument("--backlog-add", metavar="TITLE",
+                        help="Skip ingestion; add a manual backlog item")
+    parser.add_argument("--desc", default="",
+                        help="Description for --backlog-add")
     args = parser.parse_args()
 
     cfg = Config(vault_root=Path(args.vault))
+
+    if args.backlog_add:
+        path = add_item(cfg, args.backlog_add, args.desc, source="manual")
+        print(str(path))
+        return
+
+    if args.backlog_import:
+        paths = import_from_ideas(cfg)
+        if paths:
+            for p in paths:
+                print(str(p))
+        else:
+            print("nothing new to import")
+        return
+
+    if args.backlog_spec:
+        client = anthropic.Anthropic()
+        paths = run_spec_generation(cfg, client=client)
+        if paths:
+            for p in paths:
+                print(str(p))
+        else:
+            print("nothing to spec")
+        return
 
     if args.research:
         client = anthropic.Anthropic()
