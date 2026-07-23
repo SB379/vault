@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.sid.arxiv-pipeline</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/siddharthbalaji/Desktop/vault/pipeline/.venv/bin/arxiv-pipeline</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+    <key>StandardOutPath</key>
+    <string>/Users/siddharthbalaji/Desktop/vault/_system/logs/pipeline.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/siddharthbalaji/Desktop/vault/_system/logs/pipeline.err</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ANTHROPIC_API_KEY</key><string>REPLACE_ME_OR_DELETE_IF_USING_ANT_PROFILE</string>
+    </dict>
+</dict>
+</plist>
