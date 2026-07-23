@@ -79,3 +79,54 @@ def test_write_daily_digest(tmp_path):
     assert "score 8" in text
     assert "Rubric Drift" in text
     assert "2607.99999" in text
+
+
+def test_ensure_concept_pages_sanitizes_filenames(tmp_path):
+    cfg = make_cfg(tmp_path)
+    vault.ensure_concept_pages(cfg, ["I/O Scheduling"])
+    assert (cfg.concepts_dir / "I-O Scheduling.md").exists()
+    files = [p for p in tmp_path.rglob("*") if p.is_file()]
+    assert all(cfg.concepts_dir in p.parents for p in files)
+
+
+def test_frontmatter_escapes_quotes(tmp_path):
+    cfg = make_cfg(tmp_path)
+    p = make_paper()
+    p.title = 'He said "hi"'
+    p.authors = ['Ada "The Countess" Lovelace']
+    path = vault.write_paper_note(cfg, p, make_summary())
+    text = path.read_text()
+    assert 'title: "He said \\"hi\\""' in text
+    assert '"Ada \\"The Countess\\" Lovelace"' in text
+    assert '# He said "hi"' in text
+
+
+def test_slug_collision_appends_arxiv_id(tmp_path):
+    cfg = make_cfg(tmp_path)
+    p1 = make_paper()
+    path1 = vault.write_paper_note(cfg, p1, make_summary())
+    p2 = make_paper()
+    p2.arxiv_id = "2607.00002"
+    path2 = vault.write_paper_note(cfg, p2, make_summary())
+    assert path2 != path1
+    assert path2.name == "evaluating-llm-agents-a-study-2607.00002.md"
+    # rerun of same paper overwrites its own file
+    assert vault.write_paper_note(cfg, p1, make_summary()) == path1
+
+
+def test_empty_slug_uses_arxiv_id(tmp_path):
+    cfg = make_cfg(tmp_path)
+    p = make_paper()
+    p.title = "!!!"
+    path = vault.write_paper_note(cfg, p, make_summary())
+    assert path.name == "2607.00001.md"
+
+
+def test_load_state_corrupt_json(tmp_path):
+    cfg = make_cfg(tmp_path)
+    cfg.system_dir.mkdir(parents=True, exist_ok=True)
+    cfg.state_path.write_text("{not json")
+    assert vault.load_state(cfg) == {"ingested_ids": [], "failed": []}
+    corrupt = cfg.state_path.with_name("state.json.corrupt")
+    assert corrupt.exists()
+    assert corrupt.read_text() == "{not json"

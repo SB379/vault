@@ -14,7 +14,7 @@ def slugify(title: str) -> str:
 
 NOTE_TEMPLATE = """---
 arxiv_id: "{arxiv_id}"
-title: "{title}"
+title: {title_yaml}
 authors: [{authors}]
 categories: [{categories}]
 published: {published}
@@ -51,15 +51,29 @@ tags: [paper]
 """
 
 
+def _note_path(out_dir: Path, slug: str, arxiv_id: str) -> Path:
+    if not slug:
+        return out_dir / f"{arxiv_id}.md"
+    path = out_dir / f"{slug}.md"
+    if path.exists():
+        for line in path.read_text().splitlines():
+            if line.startswith("arxiv_id:"):
+                if line.split(":", 1)[1].strip().strip('"') != arxiv_id:
+                    return out_dir / f"{slug}-{arxiv_id}.md"
+                break
+    return path
+
+
 def write_paper_note(cfg: Config, paper: Paper, summary: Summary) -> Path:
     year, month = paper.published[:4], paper.published[5:7]
     out_dir = cfg.papers_dir / year / month
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / f"{slugify(paper.title)}.md"
+    path = _note_path(out_dir, slugify(paper.title), paper.arxiv_id)
     path.write_text(NOTE_TEMPLATE.format(
         arxiv_id=paper.arxiv_id,
-        title=paper.title.replace('"', "'"),
-        authors=", ".join(f'"{a}"' for a in paper.authors),
+        title=paper.title,
+        title_yaml=json.dumps(paper.title),
+        authors=", ".join(json.dumps(a) for a in paper.authors),
         categories=", ".join(paper.categories),
         published=paper.published,
         score=paper.score,
@@ -79,14 +93,20 @@ def write_paper_note(cfg: Config, paper: Paper, summary: Summary) -> Path:
 def ensure_concept_pages(cfg: Config, concepts: list[str]) -> None:
     cfg.concepts_dir.mkdir(parents=True, exist_ok=True)
     for c in concepts:
-        page = cfg.concepts_dir / f"{c}.md"
+        safe = re.sub(r"[/\\\0]", "-", c).lstrip(".")
+        if not safe:
+            continue
+        page = cfg.concepts_dir / f"{safe}.md"
         if not page.exists():
             page.write_text(f"# {c}\n\nPapers touching this concept appear as backlinks.\n")
 
 
 def load_state(cfg: Config) -> dict:
     if cfg.state_path.exists():
-        return json.loads(cfg.state_path.read_text())
+        try:
+            return json.loads(cfg.state_path.read_text())
+        except json.JSONDecodeError:
+            cfg.state_path.rename(cfg.state_path.with_name("state.json.corrupt"))
     return {"ingested_ids": [], "failed": []}
 
 
