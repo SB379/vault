@@ -269,3 +269,55 @@ export function parseConceptsVocab(raw: string): string[] {
     .map((l) => l.slice(2).trim())
     .filter(Boolean);
 }
+
+export type BacklogStatus = "proposed" | "specced" | "done";
+
+export interface BacklogItem {
+  seq: number;
+  slug: string;
+  title: string;
+  status: BacklogStatus;
+  source: string;
+  created: string;
+  description: string;
+  spec: string;
+  buildPlan: string;
+}
+
+function backlogSection(body: string, heading: string): string {
+  const m = body.match(new RegExp(`(?:^|\\n)## ${heading}\\n([\\s\\S]*?)(?=\\n## |$)`));
+  return m ? m[1].trim() : "";
+}
+
+export function parseBacklogItem(raw: string, filename: string): BacklogItem | null {
+  const slug = filename.replace(/\.md$/, "");
+  const seqMatch = slug.match(/^(\d{3})-/);
+  if (!seqMatch) return null;
+  let data: Record<string, unknown> = {};
+  let body = raw;
+  try {
+    const fm = matter(raw);
+    data = fm.data as Record<string, unknown>;
+    body = fm.content.trim();
+  } catch {
+    return null;
+  }
+  const status = String(data.status ?? "proposed");
+  if (!["proposed", "specced", "done"].includes(status)) return null;
+  const description = body.split(/\n## /)[0].trim();
+  const created =
+    data.created instanceof Date
+      ? data.created.toISOString().slice(0, 10)
+      : String(data.created ?? "");
+  return {
+    seq: parseInt(seqMatch[1], 10),
+    slug,
+    title: String(data.title ?? slug),
+    status: status as BacklogStatus,
+    source: String(data.source ?? ""),
+    created,
+    description,
+    spec: backlogSection(body, "Spec"),
+    buildPlan: backlogSection(body, "Build plan"),
+  };
+}

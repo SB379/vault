@@ -8,6 +8,8 @@ import {
   parseConceptsVocab,
   parseIdeasNote,
   parseResearchNote,
+  parseBacklogItem,
+  type BacklogItem,
   type PaperNote,
   type Digest,
   type IdeasNote,
@@ -146,4 +148,26 @@ export const getScoreReasons = cache(async (): Promise<Map<string, string>> => {
     }
   }
   return map;
+});
+
+export const getAllBacklog = cache(async (): Promise<BacklogItem[]> => {
+  const dir = path.join(VAULT_ROOT, "Backlog");
+  let names: string[];
+  try {
+    names = (await fs.readdir(dir)).filter((n) => n.endsWith(".md"));
+  } catch {
+    return [];
+  }
+  names.sort();
+  const items: BacklogItem[] = [];
+  for (const name of names) {
+    const raw = await fs.readFile(path.join(dir, name), "utf8");
+    const parsed = parseBacklogItem(raw, name);
+    if (parsed === null) {
+      console.warn(`[vault] skipping malformed backlog item: ${name}`);
+      continue;
+    }
+    items.push(parsed);
+  }
+  return items;
 });
