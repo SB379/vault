@@ -154,6 +154,67 @@ export function parseDigest(raw: string, date: string): Digest {
   return digest;
 }
 
+export interface Idea {
+  title: string;
+  description: string;
+  rationale: string;
+  sourceSlugs: string[];
+}
+
+export interface IdeasNote {
+  date: string;
+  pipelineImprovements: Idea[];
+  buildIdeas: Idea[];
+}
+
+function parseIdeaBlocks(content: string): Idea[] {
+  const ideas: Idea[] = [];
+  const parts = content.split(/^### (.+)$/m);
+  for (let i = 1; i < parts.length; i += 2) {
+    const title = parts[i].trim();
+    const body = (parts[i + 1] ?? "").trim();
+    const lines = body.split("\n");
+    const descLines: string[] = [];
+    let rationale = "";
+    const sourceSlugs: string[] = [];
+    for (const line of lines) {
+      const whyMatch = line.match(/^\*Why:\*\s*(.*)$/);
+      const srcMatch = line.match(/^\*Sources:\*\s*(.*)$/);
+      if (whyMatch) {
+        rationale = whyMatch[1].trim();
+      } else if (srcMatch) {
+        for (const m of srcMatch[1].matchAll(WIKILINK_RE)) {
+          sourceSlugs.push(m[1].trim());
+        }
+      } else {
+        descLines.push(line);
+      }
+    }
+    ideas.push({
+      title,
+      description: descLines.join("\n").trim(),
+      rationale,
+      sourceSlugs,
+    });
+  }
+  return ideas;
+}
+
+export function parseIdeasNote(raw: string, date: string): IdeasNote {
+  const note: IdeasNote = { date, pipelineImprovements: [], buildIdeas: [] };
+  const parts = raw.split(/^## (.+)$/m);
+  for (let i = 1; i < parts.length; i += 2) {
+    const heading = parts[i].trim().toLowerCase();
+    const content = parts[i + 1] ?? "";
+    if (heading === "pipeline improvements") {
+      note.pipelineImprovements = parseIdeaBlocks(content);
+    } else if (heading === "build ideas") {
+      note.buildIdeas = parseIdeaBlocks(content);
+    }
+  }
+  return note;
+}
+
 export function parseConceptsVocab(raw: string): string[] {
   return raw
     .split("\n")
