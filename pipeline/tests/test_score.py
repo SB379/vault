@@ -48,6 +48,32 @@ def test_unscored_paper_defaults_to_zero():
     assert scored[0].score == 0
 
 
+def test_transient_failure_retried_then_scores(monkeypatch):
+    import anthropic
+    import httpx
+
+    class FlakyClient:
+        def __init__(self):
+            self.messages = self
+            self.n = 0
+
+        def create(self, **kwargs):
+            self.n += 1
+            if self.n == 1:
+                raise anthropic.RateLimitError(
+                    "rl", response=httpx.Response(429, request=httpx.Request("POST", "https://x")),
+                    body=None)
+            text = SimpleNamespace(type="text", text=json.dumps(
+                {"scores": [{"arxiv_id": "2607.00001", "score": 7, "reason": "r"}]}))
+            return SimpleNamespace(content=[text], stop_reason="end_turn")
+
+    client = FlakyClient()
+    scored = score_papers([make_paper(1)], profile="x", client=client, model="m",
+                          sleep_fn=lambda s: None)
+    assert scored[0].score == 7
+    assert client.n == 2
+
+
 def test_failed_batch_degrades_to_zero():
     class BoomClient:
         def __init__(self):

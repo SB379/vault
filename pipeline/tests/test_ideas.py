@@ -161,6 +161,36 @@ def test_run_ideas_end_to_end(tmp_path, monkeypatch):
     assert "Eval harness" in path.read_text()
 
 
+def test_run_ideas_semantic_gate_blocks_write(tmp_path, monkeypatch):
+    cfg = make_vault(tmp_path)
+    monkeypatch.setattr(ideas_mod, "generate_ideas",
+                        lambda notes, client, model: {"pipeline_improvements": [], "build_ideas": []})
+    with pytest.raises(RuntimeError, match="semantic check failed"):
+        ideas_mod.run_ideas(cfg, client=None, today="2026-07-22")
+    assert not (cfg.ideas_dir / "2026-07-22.md").exists()
+
+
+def test_run_ideas_retries_transient_failure(tmp_path, monkeypatch):
+    import anthropic
+    import httpx
+
+    cfg = make_vault(tmp_path)
+    calls = {"n": 0}
+
+    def flaky(notes, client, model):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise anthropic.RateLimitError(
+                "rl", response=httpx.Response(429, request=httpx.Request("POST", "https://x")),
+                body=None)
+        return IDEAS_PAYLOAD
+    monkeypatch.setattr(ideas_mod, "generate_ideas", flaky)
+    path = ideas_mod.run_ideas(cfg, client=None, today="2026-07-22",
+                               sleep_fn=lambda s: None)
+    assert path is not None and path.exists()
+    assert calls["n"] == 2
+
+
 def test_run_ideas_no_notes(tmp_path):
     cfg = Config(vault_root=tmp_path)
     assert ideas_mod.run_ideas(cfg, client=None, today="2026-07-22") is None

@@ -1,9 +1,12 @@
 import datetime
 import json
 import re
+import time
 from pathlib import Path
 
 from .config import Config
+from .gateway import with_retries
+from .health import check_ideas
 
 IDEA_ITEM_SCHEMA = {
     "type": "object",
@@ -165,9 +168,16 @@ def write_ideas_note(cfg: Config, today: str, ideas: dict) -> Path:
     return path
 
 
-def run_ideas(cfg: Config, client, today: str) -> Path | None:
+def run_ideas(cfg: Config, client, today: str, breaker=None,
+              sleep_fn=time.sleep) -> Path | None:
     notes = collect_recent_notes(cfg, today)
     if not notes:
         return None
-    ideas = generate_ideas(notes, client=client, model=cfg.ideas_model)
+    ideas = with_retries(
+        lambda: generate_ideas(notes, client=client, model=cfg.ideas_model),
+        breaker=breaker, sleep_fn=sleep_fn,
+    )
+    problems = check_ideas(ideas)
+    if problems:
+        raise RuntimeError(f"semantic check failed: {problems}")
     return write_ideas_note(cfg, today, ideas)
