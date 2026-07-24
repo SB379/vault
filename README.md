@@ -3,23 +3,34 @@
 A self-updating research knowledge base: every morning it fetches new arXiv papers,
 scores them against a personal interest profile, deep-summarizes the best ones into
 structured Obsidian notes, links them into a concept graph, and synthesizes ideas for
-what to improve and build next. A local Next.js dashboard renders it all — reading
-list, paper detail with embedded PDFs, trends, a link graph, and generated ideas.
+what to improve and build next. Build ideas can then be market-researched (agentic
+web search → gap/crowded verdicts), and improvement ideas feed a backlog with
+LLM-generated implementation specs. A local Next.js dashboard renders it all.
 
 ```
 arXiv (cs.CL, cs.LG, cs.SE, cs.AI, cs.IT, cs.DB)
-   │  fetch (Atom API, deduped, rate-limited)
+   │  fetch (Atom API, deduped, rate-limited, per-category retry)
    ▼
 score ── Claude Haiku vs _system/interest-profile.md (0–10 per abstract)
    ▼  top N ≥ threshold
 summarize ── Claude Opus over full text (arXiv HTML → PDF fallback)
-   ▼
+   ▼  semantic health gate (hollow/off-vocabulary summaries rejected)
 Obsidian vault ── Papers/YYYY/MM/*.md · Daily/*.md digests · Concepts/*.md
    ▼                 wikilinked via a controlled concept vocabulary
 ideas ── weekly-window synthesis → Ideas/*.md (pipeline improvements + build ideas)
+   ├─ market research (on demand) ── web-search agent → Research/*.md verdicts
+   ├─ backlog (on demand) ── Backlog/*.md queue with generated specs
    ▼
-dashboard ── Next.js (localhost + LAN/iPad): Today · Papers · Trends · Graph · Ideas
+dashboard ── Next.js (localhost + LAN/iPad):
+             Today · Papers · Trends · Graph · Ideas · Market · Backlog
 ```
+
+All LLM calls route through a shared gateway (`gateway.py`): jittered exponential
+retries for rate limits/overload/5xx, a per-run circuit breaker (persistent API
+failure aborts the run cleanly instead of thrashing), and semantic health checks
+(`health.py`) so an HTTP 200 with a hollow payload never becomes a
+plausible-looking note. Long-running calls (web search) always stream — a
+non-streaming request cannot survive multi-minute server-side tool turns.
 
 ## Layout
 
@@ -27,7 +38,7 @@ dashboard ── Next.js (localhost + LAN/iPad): Today · Papers · Trends · Gr
 |---|---|
 | `pipeline/` | Python pipeline (`arxiv_pipeline` package, pytest suite, launchd plist) |
 | `dashboard/` | Next.js 16 dashboard (App Router, Tailwind, Recharts, force-graph) |
-| `Papers/` `Daily/` `Concepts/` `Ideas/` | Generated vault content (markdown, wikilinked) |
+| `Papers/` `Daily/` `Concepts/` `Ideas/` `Research/` `Backlog/` | Generated vault content (markdown, wikilinked) |
 | `_system/` | `interest-profile.md` (edit to tune selection), `concepts.md` (approved vocabulary), `state.json` (idempotency), `logs/` |
 | `docs/superpowers/` | Design specs and implementation plans |
 
@@ -45,8 +56,12 @@ Manual runs:
 cd pipeline
 .venv/bin/arxiv-pipeline                 # full run (from vault root as cwd)
 .venv/bin/arxiv-pipeline --ideas         # regenerate the ideas note only
+.venv/bin/arxiv-pipeline --research      # market-research each build idea (web search; slow, on-demand)
 .venv/bin/pytest                         # test suite
 ```
+
+Successful runs auto-commit and push generated content, so the GitHub repo is an
+off-site backup of the vault.
 
 After code changes: `.venv/bin/pip install .` (install is non-editable — the
 Homebrew Python 3.13.0 `site` bug skips `__editable__*.pth` files).
@@ -75,12 +90,13 @@ npm run test                 # vitest suite
 ```
 
 Read-only over the vault (fresh filesystem reads per request — refresh shows new
-data), except `POST /api/ideas`, which shells out to `arxiv-pipeline --ideas`.
+data), except `POST /api/ideas` and `POST /api/research`, which shell out to the
+pipeline CLI (lockfile-guarded, key read from the plist at runtime).
 
 ## Configuration
 
 All knobs live in `pipeline/arxiv_pipeline/config.py`: categories, models
-(scoring/summary/ideas), score threshold, per-run paper cap, ideas window. The
+(scoring/summary/ideas/research/spec), score threshold, per-run paper cap, ideas window. The
 Anthropic API key lives only in the (gitignored) launchd plist; the dashboard reads
 it at runtime via PlistBuddy.
 
